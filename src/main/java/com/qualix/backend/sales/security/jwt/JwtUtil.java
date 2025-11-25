@@ -21,17 +21,21 @@ public class JwtUtil {
     // ================================
     //   GERAR TOKEN
     // ================================
-    public String generateToken(String username) {
-
+    public String generateToken(String username, String role) {
         SecretKey key = getSigningKey();
 
         return Jwts.builder()
                 .setSubject(username)
+                .claim("role", role) // adiciona a role no token
                 .setIssuer("qualix-sales")
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + 86400000)) // 24h
                 .signWith(key, SignatureAlgorithm.HS256)
                 .compact();
+    }
+
+    public String extractRole(String token) {
+        return parseToken(token).getBody().get("role", String.class);
     }
 
 

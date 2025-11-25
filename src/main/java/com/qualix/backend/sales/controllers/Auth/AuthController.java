@@ -2,16 +2,28 @@ package com.qualix.backend.sales.controllers.Auth;
 
 import com.qualix.backend.sales.dto.RegisterRequest;
 import com.qualix.backend.sales.entities.User;
+import com.qualix.backend.sales.repository.UserRepository;
 import com.qualix.backend.sales.security.jwt.JwtUtil;
 import com.qualix.backend.sales.services.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 import java.util.Base64;
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/auth")
 public class AuthController {
+
+    @Autowired
+    private UserService userService;
+
+    @Autowired
+    private JwtUtil jwtUtil;
 
     @Value("${api.auth.user}")
     private String basicUser;
@@ -19,56 +31,70 @@ public class AuthController {
     @Value("${api.auth.password}")
     private String basicPass;
 
-    @Autowired
-    private JwtUtil jwtUtil;
-
-
+    // ======== TOKEN ========
     @PostMapping("/token/generation")
     public TokenResponse gerarToken(@RequestHeader("Authorization") String authorization) {
 
-        System.out.println("➡️ ENTROU NO CONTROLLER");
-        System.out.println("Authorization recebido: " + authorization);
+        if (!authorization.startsWith("Basic ")) throw new RuntimeException("Authorization inválida");
 
-        if (!authorization.startsWith("Basic ")) {
-            System.out.println("❌ Authorization inválida");
-            throw new RuntimeException("Authorization inválida");
-        }
+        String[] values = new String(Base64.getDecoder()
+                .decode(authorization.replace("Basic ", "").trim())).split(":", 2);
 
-        String base64Credentials = authorization.replace("Basic ", "").trim();
-        System.out.println("Base64 recebido: " + base64Credentials);
-
-        String credentials = new String(Base64.getDecoder().decode(base64Credentials));
-        System.out.println("Credenciais decodificadas: " + credentials);
-
-        String[] values = credentials.split(":", 2);
-        String user = values[0];
-        String pass = values[1];
-
-        System.out.println("USER: " + user);
-        System.out.println("PASS: " + pass);
-
-        if (user.equals(basicUser) && pass.equals(basicPass)) {
-
-            // 🔥 GERA JWT AQUI
-            String token = jwtUtil.generateToken(user);
-
-            System.out.println("TOKEN JWT GERADO: " + token);
-
+        if (values[0].equals(basicUser) && values[1].equals(basicPass)) {
+            String token = jwtUtil.generateToken(values[0], "ADMIN");
             return new TokenResponse(token);
         }
 
-        System.out.println("❌ Credenciais incorretas");
         throw new RuntimeException("Credenciais incorretas");
     }
 
-
     record TokenResponse(String token) {}
 
-    @Autowired
-    private UserService userService;
-
-    @PostMapping("/register")
+    // ======== CRUD USUÁRIO ========
+    @PostMapping("/users/register")
     public User register(@RequestBody RegisterRequest req) {
         return userService.register(req);
+    }
+
+    @GetMapping("/users/list")
+    public List<User> listarUsuarios() {
+        return userService.listAllUsers();
+    }
+
+    @GetMapping("/users/{id}")
+    public User getUserById(@PathVariable Long id) {
+        return userService.getUserById(id);
+    }
+
+    @GetMapping("/users/me")
+    public User getCurrentUser(@RequestHeader("Authorization") String token) {
+        String username = jwtUtil.extractUsername(token.replace("Bearer ", ""));
+        return userService.getByUsername(username);
+    }
+
+    @PutMapping("/users/{id}")
+    public User updateUser(@PathVariable Long id, @RequestBody RegisterRequest req) {
+        return userService.updateUser(id, req);
+    }
+
+    @DeleteMapping("/users/{id}")
+    public String deleteUser(@PathVariable Long id) {
+        userService.deleteUser(id);
+        return "Usuário removido com sucesso!";
+    }
+
+    @PostMapping("/users/{id}/change-password")
+    public String changePassword(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        User user = userService.getUserById(id);
+
+        String oldPass = body.get("oldPassword");
+        String newPass = body.get("newPassword");
+
+        if (!userService.matchesPassword(oldPass, user.getPassword()))
+            throw new RuntimeException("Senha antiga incorreta");
+
+        user.setPassword(userService.encodePassword(newPass));
+        userService.updateUser(id, new RegisterRequest()); // salva a alteração
+        return "Senha alterada com sucesso!";
     }
 }
