@@ -1,6 +1,9 @@
 package com.qualix.backend.sales.controllers.Auth;
 
+import com.qualix.backend.sales.dto.RegisterRequest;
+import com.qualix.backend.sales.entities.User;
 import com.qualix.backend.sales.security.jwt.JwtUtil;
+import com.qualix.backend.sales.services.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
@@ -60,4 +63,12 @@ public class AuthController {
 
 
     record TokenResponse(String token) {}
+
+    @Autowired
+    private UserService userService;
+
+    @PostMapping("/register")
+    public User register(@RequestBody RegisterRequest req) {
+        return userService.register(req);
+    }
 }
